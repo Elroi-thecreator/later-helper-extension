@@ -1,4 +1,5 @@
 import { SavedPage, UserSettings, DEFAULT_SETTINGS } from '../models/SavedPage';
+import { ReminderService } from './reminderService';
 
 const STORAGE_KEYS = {
   SAVED_PAGES: 'later_saved_pages',
@@ -27,16 +28,25 @@ export class StorageService {
       pages.unshift(page);
     }
 
+    if (page.reminderAt) {
+      await ReminderService.scheduleReminder(page.id, page.reminderAt);
+    }
+
     await chrome.storage.local.set({ [STORAGE_KEYS.SAVED_PAGES]: pages });
   }
 
   public static async deletePage(id: string): Promise<void> {
+    await ReminderService.cancelReminder(id);
     const pages = await this.getAllPages();
     const updated = pages.filter((p) => p.id !== id);
     await chrome.storage.local.set({ [STORAGE_KEYS.SAVED_PAGES]: updated });
   }
 
   public static async clearAllPages(): Promise<void> {
+    const pages = await this.getAllPages();
+    for (const page of pages) {
+      await ReminderService.cancelReminder(page.id);
+    }
     await chrome.storage.local.set({ [STORAGE_KEYS.SAVED_PAGES]: [] });
   }
 
@@ -62,12 +72,12 @@ export class StorageService {
     return updated;
   }
 
-  private static normalizeUrl(rawUrl: string): string {
+  public static normalizeUrl(rawUrl: string): string {
     try {
       const parsed = new URL(rawUrl);
       return `${parsed.origin}${parsed.pathname.replace(/\/$/, '')}${parsed.search}`;
     } catch {
-      return rawUrl.trim().toLowerCase();
+      return (rawUrl || '').trim().toLowerCase();
     }
   }
 }
