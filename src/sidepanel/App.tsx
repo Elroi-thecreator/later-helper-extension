@@ -24,18 +24,17 @@ export const App: React.FC = () => {
       return;
     }
 
-    // Try keyword match first
     const q = query.toLowerCase();
-    const keywordMatches = pages.filter(p =>
-      p.title.toLowerCase().includes(q) ||
-      p.domain.toLowerCase().includes(q) ||
-      (p.readerContent && p.readerContent.toLowerCase().includes(q))
+    const keywordMatches = pages.filter(
+      (p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.domain.toLowerCase().includes(q) ||
+        (p.readerContent && p.readerContent.toLowerCase().includes(q))
     );
 
     if (keywordMatches.length > 0) {
       setResults(keywordMatches);
     } else {
-      // Trigger semantic search fallback
       setIsSearchingSemantic(true);
       try {
         const queryEmbedding = await SemanticEngine.generateEmbedding(query);
@@ -46,8 +45,8 @@ export const App: React.FC = () => {
             similarity: SemanticEngine.cosineSimilarity(queryEmbedding, p.embedding!)
           }))
           .sort((a, b) => b.similarity - a.similarity)
-          .filter(match => match.similarity > 0.45)
-          .map(match => match.page);
+          .filter((match) => match.similarity > 0.45)
+          .map((match) => match.page);
 
         setResults(scored);
       } finally {
@@ -58,16 +57,18 @@ export const App: React.FC = () => {
 
   const handleOpenPage = async (page: SavedPage) => {
     let targetUrl = page.url;
-    // Auto-attach playhead query parameter for video platforms if present
-    if (page.state.videoPlayheadSeconds && targetUrl.includes('youtube.com/watch')) {
+
+    // Safely check video playhead using optional chaining
+    if (page.state?.videoPlayheadSeconds && targetUrl.includes('youtube.com/watch')) {
       targetUrl = `${targetUrl}&t=${page.state.videoPlayheadSeconds}s`;
     }
+
     const tab = await chrome.tabs.create({ url: targetUrl });
-    if (tab.id) {
-      // Restore scroll coordinates once tab loads
+    if (tab.id && page.state) {
+      const pageState = page.state;
       chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
         if (tabId === tab.id && info.status === 'complete') {
-          chrome.tabs.sendMessage(tab.id, { action: 'RESTORE_PAGE_STATE', state: page.state });
+          chrome.tabs.sendMessage(tab.id, { action: 'RESTORE_PAGE_STATE', state: pageState });
           chrome.tabs.onUpdated.removeListener(listener);
         }
       });
@@ -92,7 +93,9 @@ export const App: React.FC = () => {
 
       {readerViewItem ? (
         <div style={{ flex: 1, overflowY: 'auto', background: '#fff', padding: '16px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
-          <button className="btn-secondary" onClick={() => setReaderViewItem(null)} style={{ marginBottom: '12px' }}>← Back to results</button>
+          <button className="btn-secondary" onClick={() => setReaderViewItem(null)} style={{ marginBottom: '12px' }}>
+            ← Back to results
+          </button>
           <h3>{readerViewItem.title}</h3>
           <div style={{ fontSize: '13px', lineHeight: '1.6', color: '#334155' }}>
             {readerViewItem.readerContent || 'No cached reader text available.'}
@@ -100,29 +103,34 @@ export const App: React.FC = () => {
         </div>
       ) : (
         <main style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {results.map((page) => (
-            <div
-              key={page.id}
-              style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', cursor: 'pointer' }}
-            >
-              <div onClick={() => handleOpenPage(page)}>
-                <strong style={{ fontSize: '14px', display: 'block', marginBottom: '4px' }}>{page.title}</strong>
-                <div style={{ fontSize: '11px', color: '#64748b' }}>
-                  {page.domain} • {page.state.scrollPercentage}% read
-                  {page.state.videoPlayheadSeconds ? ` • Resumes at ${Math.floor(page.state.videoPlayheadSeconds / 60)}m` : ''}
+          {results.map((page) => {
+            const scrollPercentage = page.state?.scrollPercentage ?? 0;
+            const playhead = page.state?.videoPlayheadSeconds;
+
+            return (
+              <div
+                key={page.id}
+                style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', cursor: 'pointer' }}
+              >
+                <div onClick={() => handleOpenPage(page)}>
+                  <strong style={{ fontSize: '14px', display: 'block', marginBottom: '4px' }}>{page.title}</strong>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    {page.domain} • {scrollPercentage}% read
+                    {playhead ? ` • Resumes at ${Math.floor(playhead / 60)}m` : ''}
+                  </div>
+                </div>
+                <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn-secondary"
+                    style={{ fontSize: '11px', padding: '2px 8px' }}
+                    onClick={() => setReaderViewItem(page)}
+                  >
+                    📖 Read Offline
+                  </button>
                 </div>
               </div>
-              <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                <button
-                  className="btn-secondary"
-                  style={{ fontSize: '11px', padding: '2px 8px' }}
-                  onClick={() => setReaderViewItem(page)}
-                >
-                  📖 Read Offline
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </main>
       )}
     </div>
