@@ -1,14 +1,19 @@
-export type PageCategory =
-  | 'Shopping'
-  | 'Food'
-  | 'Travel'
-  | 'Learning'
-  | 'Video'
-  | 'Jobs'
-  | 'News'
-  | 'Technology'
-  | 'Social'
-  | 'Other';
+export interface HighlightSpan {
+  id: string;
+  text: string;
+  prefixContext: string;
+  xpath: string;
+  color: string;
+  createdAt: number;
+}
+
+export interface SavedState {
+  scrollY: number;
+  scrollPercentage: number;
+  videoPlayheadSeconds?: number;
+  selectedTextSnippet?: string;
+  highlights: HighlightSpan[];
+}
 
 export interface SavedPage {
   id: string;
@@ -16,24 +21,21 @@ export interface SavedPage {
   title: string;
   domain: string;
   faviconUrl?: string;
-  category: PageCategory;
+  category: string;
   tags: string[];
-  description?: string;
-  selectedText?: string;
+  
+  // Intelligence & Content Archive
+  readerContent?: string;      // Cleaned reader text
+  excerpt?: string;            // Primary summary sentence
+  embedding?: number[];        // 384-dimensional semantic vector
+  
+  // Interactive State
+  state: SavedState;
+  
+  // Metadata & Timestamps
   savedAt: number;
   lastOpenedAt?: number;
   visitCount: number;
-  reminderAt?: number;
+  isSessionBundle?: boolean;
+  bundledUrls?: string[];
 }
-
-export interface UserSettings {
-  showNotificationOnSave: boolean;
-  openSidePanelOnSave: boolean;
-  defaultCategory: PageCategory | 'Automatic';
-}
-
-export const DEFAULT_SETTINGS: UserSettings = {
-  showNotificationOnSave: true,
-  openSidePanelOnSave: false,
-  defaultCategory: 'Automatic'
-};

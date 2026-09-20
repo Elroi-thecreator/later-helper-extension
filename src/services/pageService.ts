@@ -3,6 +3,31 @@ import { CategoryService } from './categoryService';
 import { StorageService } from './storageService';
 
 export class PageService {
+
+  public static async captureCurrentSessionBundle(): Promise<SavedPage> {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  const validTabs = tabs.filter(t => t.url && !t.url.startsWith('chrome://'));
+  const urls = validTabs.map(t => t.url!);
+  const title = `Research Session (${validTabs.length} tabs) — ${new Date().toLocaleDateString()}`;
+
+  return {
+    id: crypto.randomUUID(),
+    url: validTabs[0]?.url || 'session://bundle',
+    title,
+    domain: 'Session Bundle',
+    category: 'Learning',
+    tags: ['session', 'research'],
+    isSessionBundle: true,
+    bundledUrls: urls,
+    state: {
+      scrollY: 0,
+      scrollPercentage: 0,
+      highlights: []
+    },
+    savedAt: Date.now(),
+    visitCount: 0
+  };
+  }
   public static async captureCurrentTab(selectedTextOverride?: string): Promise<SavedPage | null> {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.id || !tab.url) return null;

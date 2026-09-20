@@ -1,82 +1,130 @@
 import React, { useEffect, useState } from 'react';
 import { SavedPage } from '../models/SavedPage';
-import { StorageService } from '../services/storageService';
+import { DBService } from '../services/dbService';
+import { SemanticEngine } from '../services/semanticService';
 
 export const App: React.FC = () => {
   const [pages, setPages] = useState<SavedPage[]>([]);
+  const [results, setResults] = useState<SavedPage[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const loadPages = async () => {
-    const list = await StorageService.getAllPages();
-    setPages(list);
-  };
+  const [isSearchingSemantic, setIsSearchingSemantic] = useState(false);
+  const [readerViewItem, setReaderViewItem] = useState<SavedPage | null>(null);
 
   useEffect(() => {
-    loadPages();
+    DBService.getAllPages().then((items) => {
+      setPages(items);
+      setResults(items);
+    });
   }, []);
 
-  const filteredPages = pages.filter((page) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      page.title.toLowerCase().includes(q) ||
-      page.domain.toLowerCase().includes(q) ||
-      page.url.toLowerCase().includes(q)
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setResults(pages);
+      return;
+    }
+
+    // Try keyword match first
+    const q = query.toLowerCase();
+    const keywordMatches = pages.filter(p =>
+      p.title.toLowerCase().includes(q) ||
+      p.domain.toLowerCase().includes(q) ||
+      (p.readerContent && p.readerContent.toLowerCase().includes(q))
     );
-  });
+
+    if (keywordMatches.length > 0) {
+      setResults(keywordMatches);
+    } else {
+      // Trigger semantic search fallback
+      setIsSearchingSemantic(true);
+      try {
+        const queryEmbedding = await SemanticEngine.generateEmbedding(query);
+        const scored = pages
+          .filter((p) => p.embedding && p.embedding.length > 0)
+          .map((p) => ({
+            page: p,
+            similarity: SemanticEngine.cosineSimilarity(queryEmbedding, p.embedding!)
+          }))
+          .sort((a, b) => b.similarity - a.similarity)
+          .filter(match => match.similarity > 0.45)
+          .map(match => match.page);
+
+        setResults(scored);
+      } finally {
+        setIsSearchingSemantic(false);
+      }
+    }
+  };
 
   const handleOpenPage = async (page: SavedPage) => {
-    await StorageService.recordVisit(page.id);
-    await chrome.tabs.create({ url: page.url });
+    let targetUrl = page.url;
+    // Auto-attach playhead query parameter for video platforms if present
+    if (page.state.videoPlayheadSeconds && targetUrl.includes('youtube.com/watch')) {
+      targetUrl = `${targetUrl}&t=${page.state.videoPlayheadSeconds}s`;
+    }
+    const tab = await chrome.tabs.create({ url: targetUrl });
+    if (tab.id) {
+      // Restore scroll coordinates once tab loads
+      chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
+        if (tabId === tab.id && info.status === 'complete') {
+          chrome.tabs.sendMessage(tab.id, { action: 'RESTORE_PAGE_STATE', state: page.state });
+          chrome.tabs.onUpdated.removeListener(listener);
+        }
+      });
+    }
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
-      <header style={{ marginBottom: '16px' }}>
-        <h2 style={{ margin: '0 0 12px 0', fontSize: '20px' }}>Later — Memory</h2>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100vh', boxSizing: 'border-box' }}>
+      <header style={{ marginBottom: '12px' }}>
+        <h2 style={{ margin: '0 0 10px 0', fontSize: '18px' }}>Later Brain</h2>
         <input
           type="text"
-          placeholder="Search saved pages..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            borderRadius: '6px',
-            border: '1px solid var(--border-color)',
-            fontSize: '14px',
-            boxSizing: 'border-box'
-          }}
+          onChange={(e) => handleSearch(e.target.value)}
+          placeholder="Type keywords or describe what you remember..."
+          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
         />
+        {isSearchingSemantic && (
+          <span style={{ fontSize: '11px', color: '#2563eb' }}>Scanning concept vectors...</span>
+        )}
       </header>
 
-      <main>
-        {filteredPages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
-            {searchQuery ? 'Nothing found. Try another search.' : 'Your web memory is empty.'}
+      {readerViewItem ? (
+        <div style={{ flex: 1, overflowY: 'auto', background: '#fff', padding: '16px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+          <button className="btn-secondary" onClick={() => setReaderViewItem(null)} style={{ marginBottom: '12px' }}>← Back to results</button>
+          <h3>{readerViewItem.title}</h3>
+          <div style={{ fontSize: '13px', lineHeight: '1.6', color: '#334155' }}>
+            {readerViewItem.readerContent || 'No cached reader text available.'}
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {filteredPages.map((page) => (
-              <div
-                key={page.id}
-                onClick={() => handleOpenPage(page)}
-                style={{
-                  padding: '12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  cursor: 'pointer',
-                  backgroundColor: 'var(--bg-primary)'
-                }}
-              >
-                <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{page.title}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {page.domain} • Saved {new Date(page.savedAt).toLocaleDateString()}
+        </div>
+      ) : (
+        <main style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {results.map((page) => (
+            <div
+              key={page.id}
+              style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', cursor: 'pointer' }}
+            >
+              <div onClick={() => handleOpenPage(page)}>
+                <strong style={{ fontSize: '14px', display: 'block', marginBottom: '4px' }}>{page.title}</strong>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>
+                  {page.domain} • {page.state.scrollPercentage}% read
+                  {page.state.videoPlayheadSeconds ? ` • Resumes at ${Math.floor(page.state.videoPlayheadSeconds / 60)}m` : ''}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </main>
+              <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: '11px', padding: '2px 8px' }}
+                  onClick={() => setReaderViewItem(page)}
+                >
+                  📖 Read Offline
+                </button>
+              </div>
+            </div>
+          ))}
+        </main>
+      )}
     </div>
   );
 };
