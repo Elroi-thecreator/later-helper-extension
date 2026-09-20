@@ -45,7 +45,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div style={{ maxWidth: '480px', margin: '40px auto', padding: '0 20px', fontFamily: 'var(--font-family)' }}>
+    <div style={{ maxWidth: '480px', margin: '40px auto', padding: '0 20px' }}>
       <h2 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', fontSize: '20px' }}>
         Later Settings
       </h2>
@@ -74,7 +74,7 @@ export const App: React.FC = () => {
           </label>
 
           <div style={{ marginTop: '8px' }}>
-            <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: 'var(--text-primary)' }}>
+            <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
               Default Category
             </label>
             <select
@@ -89,7 +89,7 @@ export const App: React.FC = () => {
               }}
             >
               <option value="Automatic">Automatic (Rule-based detection)</option>
-              {CategoryService.getAllCategories().map((cat) => (
+              {CategoryService.getAllCategories().map((cat: PageCategory) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
