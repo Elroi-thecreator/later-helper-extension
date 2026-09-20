@@ -2,16 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { SavedPage } from '../models/SavedPage';
 import { StorageService } from '../services/storageService';
 import { PageService } from '../services/pageService';
-import { ReminderOption, ReminderService } from '../services/reminderService';
 import { CategoryBadge } from '../components/CategoryBadge';
-import { SearchBar } from '../components/SearchBar';
 
 export const App: React.FC = () => {
   const [pages, setPages] = useState<SavedPage[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTab, setCurrentTab] = useState<chrome.tabs.Tab | null>(null);
   const [existingPage, setExistingPage] = useState<SavedPage | null>(null);
-  const [reminder, setReminder] = useState<ReminderOption>('none');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -46,9 +43,6 @@ export const App: React.FC = () => {
     try {
       const page = await PageService.captureCurrentTab();
       if (page) {
-        if (reminder !== 'none') {
-          page.reminderAt = ReminderService.calculateTargetTimestamp(reminder);
-        }
         await StorageService.savePage(page);
         setExistingPage(page);
 
@@ -78,12 +72,47 @@ export const App: React.FC = () => {
         </button>
       </header>
 
-      {/* Search Bar in Popup */}
-      <div style={{ marginBottom: '14px' }}>
-        <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search saved pages..." />
+      {/* Inline Search Input */}
+      <div style={{ position: 'relative', marginBottom: '14px' }}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search saved pages..."
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            padding: '8px 28px 8px 10px',
+            borderRadius: '6px',
+            border: '1px solid var(--border-color)',
+            fontSize: '13px',
+            outline: 'none',
+            backgroundColor: 'var(--bg-primary)',
+            color: 'var(--text-primary)'
+          }}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            style={{
+              position: 'absolute',
+              right: '8px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              padding: '2px 4px',
+              fontSize: '12px'
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
-      {/* Save / Status Section */}
+      {/* Save Action / Duplicate Notice */}
       {!searchQuery && (
         existingPage ? (
           <div style={{ padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '14px' }}>
@@ -116,7 +145,7 @@ export const App: React.FC = () => {
         )
       )}
 
-      {/* Pages List */}
+      {/* List / Search Results */}
       <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
         <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
           {searchQuery ? `Results (${filteredPages.length})` : 'Recent'}
